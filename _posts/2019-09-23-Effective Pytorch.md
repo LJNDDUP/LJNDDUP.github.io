@@ -59,6 +59,13 @@ def get_output_directory(args):
 # 条款3: save checkpoint
 
 ```python
+save_checkpoint({
+	'args': args,
+	'epoch': epoch,
+	'model': model.state_dict(),
+	'best_result': best_result,
+	'optimizer:' optimizer
+	}, is_best, epoch, output_directory)
 import shutil
 def save_checkpoint(state, is_best, epoch, output_directory):
 	checkpoint_filename = os.path.join(output_directory, 'checkpoint-' + str(epoch) + '.pth.tar')
@@ -98,10 +105,23 @@ def merge_into_row(input, depth_target, depth_pred):
 
 	return img_merge
 
+def add_row(img_merge, row):
+	return np.vstack(img_merge, row)
+
 from PIL import Image
 def save_image(img_merge, filename):
 	img_merge = Image.fromarray(img_merge.astype('uint8'))
 	img_merge.save(filename)
+
+# i: iteration
+if i == 0:
+	img_merge = utils.merge_into_row(rgb, target, pred)
+elif i < 8 * skip and (i % skip) == 0:
+	row = utils.merge_into_row(rgb, target, pred)
+	img_merge = utils.add_row(img_merge, row)
+elif i == 8 * skip:
+	filename = os.path.join(output_directory, str(epoch) + '.png')
+	utils.save_image(img_merge, filename)
 ```
 
 # 条款6: depth metircs
@@ -201,4 +221,119 @@ class Result(object):
 				self.sum_delta1 / self.count, self.sum_delta2 / self.count, self.sum_delta3 / self.count,
 				self.sum_data_time / self.count, self.sum_gpu_time / self.count)
 			return avg
+```
+
+# 条款7: set random seed
+
+```python
+import random
+import numpy as np
+torch.manual_seed(args.manual_seed)
+torch.cuda.manual_seed(args.manual_seed)
+np.random.seed(args.manual_seed)
+random.seed(args.manual_seed)
+```
+
+# 条款8: resume
+
+```python
+if args.resume:
+	assert os.path.isfile(args.resume), \
+		'=> no checkpoint found at {}'.format(args.resume)
+	print('=> loading checkpoint {}'.format(args.resume))
+	checkpoint = torch.load(args.resume)
+	start_epoch = checkpoint['epoch'] + 1
+	best_result = checkpoint['best_result']
+	optimizer = checkpoint['optimizer']
+	model = get_models(args.dataset, pretrained=True)
+	model.load_state_dict(checkpoint['model'])
+	print('=> loaded checkpoint (epoch {})'.format(checkpoint['epoch']))
+	# clear memory
+	del checkpoint
+	# del model_dict
+	torch.cuda.empty_cache()
+else:
+	print('=> creating model')
+	model = get_models(args.dataset, pretrained=True)
+	print('=> model created')
+	start_epoch = 0
+	train_params = [{'params': model.get_1x_lr_params, 'lr': args.learning_rate},
+		{'params': model.get_10x_lr_params, 'lr': args.learning_rate * 10}]
+	optimizer = torch.optim.SGD(train_params, lr=args.learning_rate, momentum=args.momentum, weight_decay=args.weight_decay)
+	# you can use DataParallel() whether you use multi-gpus or not
+	model = nn.DataParallel(model).cuda()
+# scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=args.patience)
+# ...
+# scheduler.step(result.absrel)
+```
+
+# 条款9: write training parameters to config file
+
+```python
+config_txt = os.path.join(output_directory, 'config.txt')
+if not os.path.exists(config_txt):
+	with open(config_txt, 'w') as f_w:
+		args_ = vars(args)
+		args_str = ''
+		for k, v in args_.items():
+			args_str += str(k) + ':' + str(v) + ',\t\n'
+		f_w.write(args_str)
+```
+
+# 条款10：create log
+
+```python
+import socket
+from datetime import datetime
+from tensorboardX import SummaryWriter
+log_path = os.path.join(output_directory, 'logs', datetime.now().strftime('%b%d_%H-%M-%S') + '_' + socket.gethostname())
+os.makedirs(log_path)
+logger = SummaryWriter(log_path)
+# ...
+# logger.close()
+```
+
+# 条款11: remember change of the learning rate
+
+```python
+for i, param_group in enumerate(optimizer.param_groups):
+	lr = float(param_group['lr'])
+	logger.add_scalar('LR/lr_' + str(i), lr, epoch)
+```
+
+# 条款12: write best result to best file
+
+```python
+best_txt = os.path.join(output_directory, 'best.txt')
+# define your best
+is_best = result.rmse < best_result.rmse 
+if is_best:
+	best_result = result
+	with open(best_txt, 'w') as f_w:
+		f_w.write('epoch: {}, absrel: {:.3f}...'.format(epoch, best_result.absrel, ...))
+	if img_merge is not None:
+		img_filename = os.path.join(output_directory, 'best.png')
+		save_image(img_merge, img_filename)
+```
+
+# 条款13: data_time和gpu_time
+
+```python
+import time
+start = time.time()
+# load data
+torch.cuda.synchronize()
+data_time = time.time() - start 
+start = time.time()
+# forward and backward
+torch.cuda.synchronize()
+gpu_time = time.time() - start
+```
+
+# 条款14: torch.autograd.detect_anomaly()
+
+```python
+with torch.autograd.detect_anomaly():
+	# forward
+	# backward
 ```
