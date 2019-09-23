@@ -267,7 +267,7 @@ else:
 # scheduler.step(result.absrel)
 ```
 
-# 条款09: write training parameters to config file
+# 条款09: config file
 
 ```python
 config_txt = os.path.join(output_directory, 'config.txt')
@@ -293,7 +293,7 @@ logger = SummaryWriter(log_path)
 # logger.close()
 ```
 
-# 条款11: remember change of the learning rate
+# 条款11: record the learning rate
 
 ```python
 for i, param_group in enumerate(optimizer.param_groups):
@@ -301,7 +301,7 @@ for i, param_group in enumerate(optimizer.param_groups):
 	logger.add_scalar('LR/lr_' + str(i), lr, epoch)
 ```
 
-# 条款12: write best result to best file
+# 条款12: best file
 
 ```python
 best_txt = os.path.join(output_directory, 'best.txt')
@@ -316,7 +316,7 @@ if is_best:
 		save_image(img_merge, img_filename)
 ```
 
-# 条款13: data_time和gpu_time
+# 条款13: record time
 
 ```python
 import time
