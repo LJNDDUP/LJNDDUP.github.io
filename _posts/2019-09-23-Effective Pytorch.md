@@ -280,7 +280,7 @@ if not os.path.exists(config_txt):
 		f_w.write(args_str)
 ```
 
-# 条款10：create log
+# 条款10: create log
 
 ```python
 import socket
