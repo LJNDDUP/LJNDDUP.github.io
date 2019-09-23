@@ -17,23 +17,23 @@ def parse_command():
 	import argparse
 	parser = argparse.ArgumentParser(description='JAN')
 	parser.add_argument('--resume', default=None, type=str, metavar='PATH',
-		help='path to latest checkpoint (default: ./example.checkpoint.pth.tar')
+			help='path to latest checkpoint (default: ./example.checkpoint.pth.tar')
 	parser.add_argument('--batch-size', default=4, type=int, 
-		help='mini-batch size (default: 4)')
+			help='mini-batch size (default: 4)')
 	parser.add_argument('--epochs', default=100, type=int, metavar='N',
-		help='number of total epoch to run (default: 100)')
+			help='number of total epoch to run (default: 100)')
 	parser.add_argument('--lr', '--learning-rate', default=1e-3, type=float, metavar='LR', 
-		help='initial learning rate (default: 1e-3)')
+			help='initial learning rate (default: 1e-3)')
 	parser.add_argument('--momentum', default=0.9, type=float, metavar='M',
-		help='momentum (default: 0.9)')
+			help='momentum (default: 0.9)')
 	parser.add_argument('--weight-decay', default=5e-4, type=float, metavar='W',
-		help='weight decay (default: 5e-4)')
+			help='weight decay (default: 5e-4)')
 	parser.add_argument('--dataset', default='kitti', type=str,
-		help='dataset used for training, kitti and nyu is available')
+			help='dataset used for training, kitti and nyu is available')
 	parser.add_argument('--manual-seed', default=1, type=int, 
-		help='manaully set random seed (default: 1)')
+			help='manaully set random seed (default: 1)')
 	parser.add_argument('--gpu', default='0', type=str, 
-		help='gpu id (default: '0')')
+			help='gpu id (default: '0')')
 	parser.add_argument('--print-freq', default=10, type=int, metavar='F', 
 		help='print frequence (default: 10)')
 	args = parser.parse_args()
