@@ -40,7 +40,7 @@ def parse_command():
 	return args
 ```
 
-# 条款2: output directory
+# 条款02: output directory
 
 ```python
 def get_output_directory(args):
@@ -56,7 +56,7 @@ def get_output_directory(args):
 	return save_dir
 ```
 
-# 条款3: save checkpoint
+# 条款03: save checkpoint
 
 ```python
 save_checkpoint({
@@ -75,7 +75,7 @@ def save_checkpoint(state, is_best, epoch, output_directory):
 		shutil.copyfile(checkpoint_filename, best_filename)
 ```
 
-# 条款4: color depth map
+# 条款04: color depth map
 
 ```python
 import matplotlob.pyplot as plt 
@@ -89,7 +89,7 @@ def color_depth_map(depth, d_min=None, d_max=None):
 	return 255 * cmap(depth_relative)[:, :, :3]
 ```
 
-# 条款5: save image
+# 条款05: save image
 
 ```python
 def merge_into_row(input, depth_target, depth_pred):
@@ -124,7 +124,7 @@ elif i == 8 * skip:
 	utils.save_image(img_merge, filename)
 ```
 
-# 条款6: depth metircs
+# 条款06: depth metircs
 
 ```python
 import math
@@ -223,7 +223,7 @@ class Result(object):
 			return avg
 ```
 
-# 条款7: set random seed
+# 条款07: set random seed
 
 ```python
 import random
@@ -234,7 +234,7 @@ np.random.seed(args.manual_seed)
 random.seed(args.manual_seed)
 ```
 
-# 条款8: resume
+# 条款08: resume
 
 ```python
 if args.resume:
@@ -267,7 +267,7 @@ else:
 # scheduler.step(result.absrel)
 ```
 
-# 条款9: write training parameters to config file
+# 条款09: write training parameters to config file
 
 ```python
 config_txt = os.path.join(output_directory, 'config.txt')
