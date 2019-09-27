@@ -13,6 +13,7 @@ tags:
 # 条款01: parser
 
 ```python
+'''utils.py'''
 def parse_command():
 	import argparse
 	parser = argparse.ArgumentParser(description='JAN')
@@ -43,6 +44,7 @@ def parse_command():
 # 条款02: output directory
 
 ```python
+'''utils.py'''
 def get_output_directory(args):
 	save_dir_root = os.path.join(os.path.dirname(os.path.abspath(__file__)))
 	save_dir_root = os.path.join(save_dir_root, 'result', args.dataset)
@@ -59,6 +61,7 @@ def get_output_directory(args):
 # 条款03: save checkpoint
 
 ```python
+'''utils.py'''
 save_checkpoint({
 	'args': args,
 	'epoch': epoch,
@@ -78,6 +81,7 @@ def save_checkpoint(state, is_best, epoch, output_directory):
 # 条款04: color depth map
 
 ```python
+'''utils.py'''
 import matplotlob.pyplot as plt 
 camp = plt.cm.jet
 def color_depth_map(depth, d_min=None, d_max=None):
@@ -92,6 +96,7 @@ def color_depth_map(depth, d_min=None, d_max=None):
 # 条款05: save image
 
 ```python
+'''utils.py'''
 def merge_into_row(input, depth_target, depth_pred):
 	rgb = 255 * np.transpose(np.squeeze(input.cpu().numpy), (1, 2, 0))  # (H, W, C)
 	depth_target_cpu = np.squeeze(depth_target.cpu().numpy())
@@ -127,6 +132,7 @@ elif i == 8 * skip:
 # 条款06: depth metircs
 
 ```python
+'''metrics.py'''
 import math
 import torch
 import numpy as np
@@ -226,6 +232,7 @@ class Result(object):
 # 条款07: set random seed
 
 ```python
+'''main.py'''
 import random
 import numpy as np
 torch.manual_seed(args.manual_seed)
@@ -237,6 +244,7 @@ random.seed(args.manual_seed)
 # 条款08: resume
 
 ```python
+'''main.py'''
 if args.resume:
 	assert os.path.isfile(args.resume), \
 		'=> no checkpoint found at {}'.format(args.resume)
@@ -270,6 +278,7 @@ else:
 # 条款09: config file
 
 ```python
+'''main.py'''
 config_txt = os.path.join(output_directory, 'config.txt')
 if not os.path.exists(config_txt):
 	with open(config_txt, 'w') as f_w:
@@ -283,6 +292,7 @@ if not os.path.exists(config_txt):
 # 条款10: create log
 
 ```python
+'''main.py'''
 import socket
 from datetime import datetime
 from tensorboardX import SummaryWriter
@@ -296,6 +306,7 @@ logger = SummaryWriter(log_path)
 # 条款11: record the learning rate
 
 ```python
+'''main.py'''
 for i, param_group in enumerate(optimizer.param_groups):
 	lr = float(param_group['lr'])
 	logger.add_scalar('LR/lr_' + str(i), lr, epoch)
@@ -304,6 +315,7 @@ for i, param_group in enumerate(optimizer.param_groups):
 # 条款12: best file
 
 ```python
+'''main.py'''
 best_txt = os.path.join(output_directory, 'best.txt')
 # define your best
 is_best = result.rmse < best_result.rmse 
@@ -319,6 +331,7 @@ if is_best:
 # 条款13: record time
 
 ```python
+'''main.py'''
 import time
 start = time.time()
 # load data
@@ -333,7 +346,353 @@ gpu_time = time.time() - start
 # 条款14: torch.autograd.detect_anomaly()
 
 ```python
+'''main.py train'''
 with torch.autograd.detect_anomaly():
 	# forward
 	# backward
+```
+
+# 条款15: 1x and 10x
+
+```python
+'''model'''
+def get_1x_lr_params(self):
+	modules = [self.feature_extractor]
+	for m in modules:
+		for p in m.parameters():
+			if p.requires_grad:
+				yield p
+
+def get_10x_lr_params(self):
+	modules = [self.aspp_module, self.orl]
+	for m in modules:
+		for p in m.parameters():
+			if p.requires_grad:
+				yield p
+```
+
+# 条款16: load state_dict except fc
+
+```python
+'''model'''
+def resnet101(pretrained=True):
+	resnet101 = ResNet(...)
+	if pretrained:
+		saved_state_dict = torch.load('...')
+		resnet101_state_dict = resnet101.state_dict().copy()
+		for i in saved_state_dict:
+			i_parts = i.split('.')
+			if not i_parts[0] == 'fc':
+				resnet101_state_dict['.'.join(i_parts)] = saved_state_dict[i]
+		resnet101.load_state_dict(resnet101_state_dict)
+```
+
+# 条款17: load state_dict from a to b
+
+```python
+'''model'''
+pretrained_dict = ...
+model_dict = {}
+state_dict = model.state_dict()
+for k, v in pretrained_dict.items():
+	if k in state_dict:
+		model_dict[k] = v
+state_dict.update(model_dict)
+model.load_state_dict(state_dict)
+```
+
+# 条款18: initialize weight
+
+```python
+'''model'''
+def weights_init(m, type='xavier'):
+	if isinstance(m, nn.Conv2d) or isinstance(m, nn.ConvTranspose2d):
+		if type == 'xavier':
+			torch.nn.init.xavier_normal_(m.weight)
+		elif type == 'kaiming':
+			torch.nn.init.kaiming_normal_(m.weight)
+		else:
+			n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
+			m.weight.data.normal_(0, math.sqrt(2. / n))
+		if m.bias is not None:
+			m.bias.data.zero_()
+	elif isinstance(m, nn.BatchNorm2d):
+		m.weight.data.fill_(1.)
+		m.bias.data.zero_()
+	elif isinstance(m, nn.Linear):
+		if type == 'xavier':
+			torch.nn.init.xavier_normal_(m.weight)
+		elif type == 'kaiming':
+			torch.nn.init.kaiming_normal_(m.weight)
+		else:
+			m.weight.data.fill_(1.)
+		if m.bias is not None:
+			m.bias.data.zero_()
+	elif isinstance(m, nn.Module):
+		for _m in m:
+			if isinstance(_m, nn.Conv2d) or isinstance(_m, nn.ConvTranspose2d):
+				if type == 'xavier':
+					torch.nn.init.xavier_normal_(_m.weight)
+				elif type == 'kaiming':
+					torch.nn.init.kaiming_normal_(_m.weight)
+				else:
+					n = _m.kernel_size[0] * _m.kernel_size[1] * _m.out_channels
+					_m.weight.data.normal_(0, math.sqrt(2. / n))
+				if _m.bias is not None:
+					_m.bias.data.zero_()
+			elif isinstance(_m, nn.BatchNorm2d):
+				_m.weight.data.fill_(1.)
+				_m.bias.data.zero_()
+			elif isinstance(_m, nn.Linear):
+				if type == 'xavier':
+					torch.nn.init.xavier_normal_(_m.weight)
+				elif type == 'kaiming':
+					torch.nn.init.kaiming_normal_(_m.weight)
+				else:
+					_m.weight.data.fill_(1.)
+				if _m.bias is not None:
+					_m.bias.data.zero_()
+
+'''__init__'''
+for m in self.modules():
+	if isinstance...
+
+layers = [self.d0, ...]
+for l in layers:
+	for m in l.modules():
+		if isinstance...
+```
+
+# 条款19: Full Image Encoder
+
+```python
+'''model'''
+class FullImageEncoder(nn.Module):
+	def __init__(self):
+		super(FullImageEncoder, self).__init__()
+		self.global_pooling = nn.AvgPool2d(16, stride=16, padding=(8, 8))
+		self.dropout = nn.Dropout(p=0.5)
+		self.global_fc = nn.Linear(2048 * 4 * 5, 512)
+		self.relu = nn.Relu(inplace=True)
+		self.conv = nn.Conv2d(512, 512, 1)
+	
+	def forward(self, _input):
+		out = self.global_pooling(_input)
+		out = self.dropout(out)
+		out = out.view(-1, 2048 * 4 * 5)
+		out = self.relu(self.global_fc(out))
+		out = out.view(-1, 512, 1, 1)
+		out = self.conv(out)
+		out = F.interpolate(out, size=(49, 65), mode='bilinear')
+		return out
+```
+
+# 条款20: MSELoss L1Loss BerhuLoss ScaleInvariantLoss
+
+```python
+'''loss.py'''
+class MaskedMSELoss(nn.Module):
+	def __init__(self):
+		super(MaskedMESLoss, self).__init__()
+
+	def forward(self, pred, target):
+		assert pred.dim == target.dim, 'MaskedMESLoss: inconsistent dimension'
+		valid_mask = (target > 0).detach()
+		diff = pred - target 
+		diff = diff[valid_mask]
+		return (diff ** 2).mean()
+
+class MaskedL1Loss(nn.Module):
+	def __init__(self):
+		super(MaskedL1Loss, self).__init__()
+
+	def forward(self, pred, target):
+		assert pred.dim == target.dim, 'MaskedL1Loss: inconsistent dimension'
+		valid_mask = (target > 0).detach()
+		diff = pred - target 
+		diff = diff[valid_mask]
+		return diff.abs().mean()
+
+class MaskedBerhuLoss(nn.Module):
+	def __init__(self):
+		super(MaskedBerhuLoss, self).__init__()
+
+	def forward(self, pred, target):
+		assert pred.dim == target.dim, 'MaskedBerhuLoss: inconsistent dimension'
+		valid_mask = (target > 0).detach()
+		diff = pred - target 
+		diff = diff[valid_mask]
+
+		huber_c = 0.2 * torch.max(pred - target)
+		huber_mask = (diff > huber_c).detach()
+		diff1 = diff[~huber_mask]
+		diff1 = diff.abs()
+		diff2 = diff[huber_mask]
+		diff2 = diff2 ** 2
+		return torch.cat((diff1, diff2)).mean()
+
+class ScaleInvariantLoss(nn.Module):
+	def __init__(self, _lambda):
+		super(ScaleInvariantLoss, self).__init__()
+		self._lambda = _lambda
+
+	def forward(self, pred, target):
+		pred_log = torch.log(pred)
+		target_log = torch.log(target)
+		diff_log = pred_log - target_log
+		return diff_log.pow(2).mean() - self._lambda * diff_log.mean().pow(2)
+```
+
+# 条款21: OrdLoss
+
+```python
+'''loss.py'''
+class OrdLoss(nn.Module):
+	def __init__(self):
+		super(OrdLoss, self).__init__()
+
+	def forward(self, pred, target):
+		"""
+		pred: N, K, H, W
+		target: N, 1, H, W
+		"""
+		N, C, H, W = pred.size()
+		ord_num = C 
+
+		K = torch.arange(0, C, dtype=torch.int)
+		K = K.view(1, C, 1, 1).repeat((N, 1, H, W))
+		if torch.cuda.is_available():
+			K = K.cuda()
+		mask_0 = (K < target).detach()
+		mask_1 = (K >= target).detach()
+		one = torch.ones(pred[mask_1].size())
+		if torch.cuda.is_available():
+			one = one.cuda()
+		loss = torch.sum(torch.log(torch.clamp(pred[mask_0], min=1e-8, max=1e8))) + 
+			torch.sum(torch.log(torch.clamp(one - pred[mask_1], min=1e-8, max=1e8)))
+		return loss / (-1 * N * H * W)
+```
+
+# 条款22: load rgb and depth
+
+```python
+def rgb_read(filename, rgb=True):
+	# open path as file to avoid ResourceWarning and return it as a numpy array
+	with open(filename, 'rb') as f:
+		img = Image.open(f)
+		if rgb:
+			return np.array(img.convert('RGB'))
+		else:
+			return np.array(img.convert('I'))
+
+def depth_read(filename):
+	# load depth map D from png file and return it as a numpy array
+	depth_png = np.array(Image.open(filename), dtype=int)
+	# make sure we have a proper 16bit depth map here.. not 8 bit
+	assert(np.max(depth_png) > 255)
+
+	depth = depth_png.astype(np.float32) / 256.
+	depth[depth_png == 0] = -1.
+	return depth
+```
+
+# 条款23: nconv
+
+```python
+import torch
+import torch.nn.functional as F
+from torch.nn.modules.conv import _ConvNd
+import numpy as np
+from scipy.stats import poisson
+from scipy import signal
+
+
+class NConv2d(_ConvNd):
+
+	def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, dilation=1, groups=1, bias=True, pos_fn='softplus', init_method='k'):
+		super(NConv2d, self).__init__(in_channels, out_channels, kernel_size, stride, padding, dilation, False, 0, groups, bias)
+		self.eps = 1e-20
+		self.pos_fn = pos_fn
+		self.init_method = init_method
+
+		self.init_parameters()
+		if pos_fn is not None:
+			EnforcePos.apply(self, 'weight', pos_fn)
+
+	def forward(self, data, conf):
+
+		# normalized convolution
+		demon = F.conv2d(conf, self.weight, None, self.stride, self.padding, self.dilation, self.groups)
+		nomin = F.conv2d(conf*data, self.weight, None, self.stride, self.padding, self.dilation, self.groups)
+		nconv = nomin / (demon + self.eps)
+
+		batch_size, out_channels, H, W = nconv.size()
+		_, in_channels, kernel_size, kernel_size = self.weight.size()
+		
+		# add bias
+		bias = self.bias
+		bias = bias.view(1, out_channels, 1, 1)
+		bias = bias.expand_as(nconv)
+		nconv += bias
+
+		# propagate confidence
+		cout = demon
+		cout = cout.view(batch_size, out_channels, H * W)
+		weight = self.weight
+		weight = weight.view(out_channels, -1)
+		cout /= torch.sum(weight, dim=-1, keepdim=True)
+		cout = cout.view(batch_size, out_channels, H, W)
+		return nconv, cout
+
+	def init_parameters(self):
+		if self.init_method == 'x':
+			torch.nn.init.xavier_uniform_(self.weight)
+		elif self.init_method == 'k':
+			torch.nn.init.kaiming_uniform_(self.weight)
+		self.bias = torch.nn.Parameter(torch.zeros(self.out_channels) + 0.01)
+
+
+class EnforcePos():
+
+	def __init__(self, pos_fn, name):
+		self.pos_fn = pos_fn
+		self.name = name
+
+	@staticmethod
+	def apply(module, name ,pos_fn):
+		fn = EnforcePos(pos_fn, name)
+		module.register_forward_pre_hook(fn)
+		return fn 
+
+	def __call__(self, module, inputs):
+		if module.training:
+			weight = getattr(module, self.name)
+			weight.data = self._pos(weight).data 
+		else:
+			pass
+
+	def _pos(self, p):
+		pos_fn = self.pos_fn.lower()
+		if pos_fn == 'softmax':
+			p_size = p.size()
+			p = p.view(p_size[0], p_size[1], -1)
+			p = F.softmax(p, dim=-1)
+			return p.view(p_size)
+		elif pos_fn == 'exp':
+			return torch.exp(p)
+		elif pos_fn == 'softplus':
+			return torch.softplus(p, beta=10)
+		elif pos_fn == 'sigmoid':
+			return troch.sigmoid(p)
+		else:
+			print('undefined positive function')
+			return 
+```
+
+# 条款24: hourglass
+
+![hourglass](/img/hourglass.jpg)
+
+```python
+
 ```
