@@ -694,5 +694,47 @@ class EnforcePos():
 ![hourglass](/img/hourglass.jpg)
 
 ```python
+import torch.nn as nn
+import torch.nn.functional as F 
 
+
+def convbn(in_channels, out_channels, kernel_size, stride, padding, dilation=1):
+	return nn.Sequential(nn.Conv2d(in_channels, out_channels, kernel_size, stride=stride, padding=dilation if dilation > 1 else padding, dilation=dilation, bias=False),
+		nn.BatchNorm2d(out_channels))
+
+
+class hourglass(nn.Module):
+
+	def __init__(self, in_channels):
+		super(hourglass, self).__init__()
+		self.conv1 = nn.Sequential(convbn(in_channels, in_channels*2, kernel_size=3, stride=2, padding=1),
+			nn.ReLU(inplace=True))
+		self.conv2 = convbn(in_channels*2, in_channels*2, kernel_size=3, stride=1, padding=1)
+		self.conv3 = nn.Sequential(convbn(in_channels*2, in_channels*2, kernel_size=3, stride=2, padding=1),
+			nn.ReLU(inplace=True))
+		self.conv4 = nn.Sequential(convbn(in_channels*2, in_channels*2, kernel_size=3, stride=2, padding=1),
+			nn.ReLU(inplace=True))
+		self.conv5 = nn.Sequential(nn.ConvTranspose2d(in_channels*2, in_channels*2, kernel_size=3, stride=2, padding=1, output_padding=1, bias=False),
+			nn.BatchNorm2d(in_channels*2))
+		self.conv6 = nn.Sequential(nn.ConvTranspose2d(in_channels*2, in_channels, kernel_size=3, stride=2, padding=1, output_padding=1, bias=False),
+			nn.BatchNorm2d(in_channels))
+
+	def forward(self, x, presqu, postsqu):
+		out = self.conv1(x)					# in: 1		out: 1/2
+		pre = self.conv2(out)				# in: 1/2	out: 1/2
+		if postsqu is not None:
+			pre = F.relu(pre + postsqu, inplace=True)
+		else:
+			pre = F.relu(pre, inplace=True)
+		out = self.conv3(pre)				# in: 1/2	out: 1/4
+		out = self.conv4(out)				# in: 1/4	out: 1/4
+		post = self.conv5(out)				# in: 1/4	out: 1/2
+		if presqu is not None:
+			post = F.relu(post + presqu, inplace=True)
+		else:
+			post = F.relu(post, inplace=True)
+		out = self.conv6(post)				# in: 1/2	out: 1
+		return out, pre, post
 ```
+
+# 条款25: 
