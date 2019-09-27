@@ -720,7 +720,7 @@ class hourglass(nn.Module):
 			nn.BatchNorm2d(in_channels))
 
 	def forward(self, x, presqu, postsqu):
-		out = self.conv1(x)					# in: 1		out: 1/2
+		out = self.conv1(x)				# in: 1		out: 1/2
 		pre = self.conv2(out)				# in: 1/2	out: 1/2
 		if postsqu is not None:
 			pre = F.relu(pre + postsqu, inplace=True)
