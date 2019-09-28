@@ -738,4 +738,13 @@ class hourglass(nn.Module):
 		return out, pre, post
 ```
 
-# 条款25: 
+# 条款25: 指定使用的GPU
+
+```python
+'''
+os.environ['CUDA_VISIBLE_DEVICES'] = '0,1' and
+os.environ['CUDA_VISIBLE_DEVICES'] = 0,1 both ok
+'''
+import os
+os.environ['CUDA_VISIBLE_DEVICES'] = '1'
+```
