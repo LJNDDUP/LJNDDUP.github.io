@@ -19,6 +19,8 @@ def parse_command():
 	parser = argparse.ArgumentParser(description='JAN')
 	parser.add_argument('--resume', default=None, type=str, metavar='PATH',
 		help='path to latest checkpoint (default: ./example.checkpoint.pth.tar')
+	parser.add_argument('--freeze', action='store_true', default=False,
+		help='freeze a module')
 	parser.add_argument('--batch-size', default=4, type=int, 
 		help='mini-batch size (default: 4)')
 	parser.add_argument('--epochs', default=100, type=int, metavar='N',
@@ -98,7 +100,7 @@ def color_depth_map(depth, d_min=None, d_max=None):
 ```python
 '''utils.py'''
 def merge_into_row(input, depth_target, depth_pred):
-	rgb = 255 * np.transpose(np.squeeze(input.cpu().numpy), (1, 2, 0))  # (H, W, C)
+	rgb = 255 * np.transpose(np.squeeze(input.cpu().numpy()), (1, 2, 0))  # (H, W, C)
 	depth_target_cpu = np.squeeze(depth_target.cpu().numpy())
 	depth_pred_cpu = np.squeeze(depth_pred.cpu().numpy())
 
@@ -147,7 +149,7 @@ class Result(object):
 		self.irmse, self.imae = 0., 0.
 		self.delta1, self.delta2, self.delta3 = 0., 0., 0.
 		# self.silog = 0.
-		self.data_time, self.gpu_time = 0., 0.
+		self.data_time, self.net_time = 0., 0.
 
 	def set_to_worst(self):
 		self.absrel, self.sqrel = np.inf, np.inf  
@@ -155,15 +157,15 @@ class Result(object):
 		self.irmse, self.imae = np.inf, np.inf
 		self.delta1, self.delta2, self.delta3 = 0., 0., 0.
 		# self.silog = np.inf
-		self.data_time, self.gpu_time = 0., 0.
+		self.data_time, self.net_time = 0., 0.
 
-	def update(self, absrel, sqrel, mse, rmse, mae, irmse, imae, delta1, delta2, delta3, data_time, gpu_time):
+	def update(self, absrel, sqrel, mse, rmse, mae, irmse, imae, delta1, delta2, delta3, data_time, net_time):
 		self.absrel, self.sqrel = absrel, sqrel
 		self.mse, self.rmse, self.mae = mse, rmse, mae
 		self.irmse, self.imae = irmse, imae
 		self.delta1, self.delta2, self.delta3 = delta1, delta2, delta3
 		# self.silog = silog
-		self.data_time, self.gpu_time = data_time, gpu_time
+		self.data_time, self.net_time = data_time, net_time
 
 	def evaluate(self, output, target):
 		valid_mask = target > 0
@@ -201,7 +203,7 @@ class Result(object):
 			self.sum_mse, self.sum_rmse, self.sum_mae = 0., 0., 0.
 			self.sum_irmse, self.sum_imae = 0., 0.
 			self.sum_delta1, self.sum_delta2, self.sum_delta3 = 0., 0., 0.
-			self.sum_data_time, self.sum_gpu_time = 0., 0.
+			self.sum_data_time, self.sum_net_time = 0., 0.
 
 		def update(self, result, data_time, gpu_time, n=1):
 			self.count += n
@@ -216,7 +218,7 @@ class Result(object):
 			self.sum_delta2 += n*result.delta2
 			self.sum_delta3 += n*result.delta3
 			self.sum_data_time += n*result.data_time
-			self.sum_gpu_time += n*result.gpu_time
+			self.sum_net_time += n*result.net_time
 
 		def average(self):
 			avg = Result()
@@ -225,7 +227,7 @@ class Result(object):
 				self.sum_mse / self.count, self.sum_rmse / self.count, self.sum_mae / self.count, 
 				self.sum_irmse / self.count, self.sum_imae / self.count,
 				self.sum_delta1 / self.count, self.sum_delta2 / self.count, self.sum_delta3 / self.count,
-				self.sum_data_time / self.count, self.sum_gpu_time / self.count)
+				self.sum_data_time / self.count, self.sum_net_time / self.count)
 			return avg
 ```
 
@@ -245,32 +247,28 @@ random.seed(args.manual_seed)
 
 ```python
 '''main.py'''
+model = get_models(args.dataset, pretrained=True)
+# you can use DataParallel() whether you use multi-gpus or not
+model = nn.DataParallel(model).cuda()
+train_params = [{'params': model.get_1x_lr_params, 'lr': args.learning_rate},
+	{'params': model.get_10x_lr_params, 'lr': args.learning_rate * 10}]
+optimizer = torch.optim.SGD(train_params, lr=args.learning_rate, momentum=args.momentum, weight_decay=args.weight_decay)
+scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=args.patience)
 if args.resume:
 	assert os.path.isfile(args.resume), \
-		'=> no checkpoint found at {}'.format(args.resume)
-	print('=> loading checkpoint {}'.format(args.resume))
+		'=> No checkpoint found at {}'.format(args.resume)
+	print('Loading checkpoint {}'.format(args.resume))
 	checkpoint = torch.load(args.resume)
 	start_epoch = checkpoint['epoch'] + 1
 	best_result = checkpoint['best_result']
-	optimizer = checkpoint['optimizer']
-	model = get_models(args.dataset, pretrained=True)
+	optimizer.load_state_dict(checkpoint['optimizer'])
 	model.load_state_dict(checkpoint['model'])
-	print('=> loaded checkpoint (epoch {})'.format(checkpoint['epoch']))
 	# clear memory
 	del checkpoint
 	# del model_dict
 	torch.cuda.empty_cache()
 else:
-	print('=> creating model')
-	model = get_models(args.dataset, pretrained=True)
-	print('=> model created')
 	start_epoch = 0
-	train_params = [{'params': model.get_1x_lr_params, 'lr': args.learning_rate},
-		{'params': model.get_10x_lr_params, 'lr': args.learning_rate * 10}]
-	optimizer = torch.optim.SGD(train_params, lr=args.learning_rate, momentum=args.momentum, weight_decay=args.weight_decay)
-	# you can use DataParallel() whether you use multi-gpus or not
-	model = nn.DataParallel(model).cuda()
-# scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=args.patience)
 # ...
 # scheduler.step(result.absrel)
 ```
@@ -293,10 +291,13 @@ if not os.path.exists(config_txt):
 
 ```python
 '''main.py'''
+import shutil
 import socket
 from datetime import datetime
 from tensorboardX import SummaryWriter
 log_path = os.path.join(output_directory, 'logs', datetime.now().strftime('%b%d_%H-%M-%S') + '_' + socket.gethostname())
+if os.path.isdir(log_path):
+	shutil.rmtree(log_path)
 os.makedirs(log_path)
 logger = SummaryWriter(log_path)
 # ...
@@ -513,22 +514,22 @@ class MaskedL1Loss(nn.Module):
 		diff = diff[valid_mask]
 		return diff.abs().mean()
 
-class MaskedBerhuLoss(nn.Module):
+class MaskedHuberLoss(nn.Module):
 	def __init__(self):
 		super(MaskedBerhuLoss, self).__init__()
 
 	def forward(self, pred, target):
 		assert pred.dim == target.dim, 'MaskedBerhuLoss: inconsistent dimension'
-		valid_mask = (target > 0).detach()
-		diff = pred - target 
-		diff = diff[valid_mask]
+		delta = 0.2 * (pred - target).abs().max()
 
-		huber_c = 0.2 * torch.max(pred - target)
-		huber_mask = (diff > huber_c).detach()
-		diff1 = diff[~huber_mask]
-		diff1 = diff.abs()
-		diff2 = diff[huber_mask]
-		diff2 = diff2 ** 2
+		valid_mask = (target > 0).detach()
+		huber_mask = ((pred - target).abs() <= delta).detach()
+
+		diff1 = 0.5 * (pred - target).pow(2)
+		diff2 = delta * (pred - target).abs() - 0.5 * (delta ** 2)
+		diff1 = diff1[huber_mask]
+		diff2 = diff2[~huber_mask]
+
 		return torch.cat((diff1, diff2)).mean()
 
 class ScaleInvariantLoss(nn.Module):
