@@ -488,10 +488,13 @@ class FullImageEncoder(nn.Module):
 		return out
 ```
 
-# 条款20: MSELoss L1Loss BerhuLoss ScaleInvariantLoss
+# 条款20: MSELoss L1Loss SmoothL1Loss ScaleInvariantLoss
+SmoothL1Loss is a form of Huber Loss.
 
 ```python
 '''loss.py'''
+import troch.nn.functional as F
+
 class MaskedMSELoss(nn.Module):
 	def __init__(self):
 		super(MaskedMESLoss, self).__init__()
@@ -514,23 +517,15 @@ class MaskedL1Loss(nn.Module):
 		diff = diff[valid_mask]
 		return diff.abs().mean()
 
-class MaskedHuberLoss(nn.Module):
+class MaskedSmoothL1(nn.Module):
 	def __init__(self):
 		super(MaskedBerhuLoss, self).__init__()
 
 	def forward(self, pred, target):
-		assert pred.dim == target.dim, 'MaskedBerhuLoss: inconsistent dimension'
-		delta = 0.2 * (pred - target).abs().max()
-
+		assert pred.dim == target.dim, 'MaskedSmoothL1: inconsistent dimension'
 		valid_mask = (target > 0).detach()
-		huber_mask = ((pred - target).abs() <= delta).detach()
-
-		diff1 = 0.5 * (pred - target).pow(2)
-		diff2 = delta * (pred - target).abs() - 0.5 * (delta ** 2)
-		diff1 = diff1[huber_mask]
-		diff2 = diff2[~huber_mask]
-
-		return torch.cat((diff1, diff2)).mean()
+		loss = F.smooth_l1_loss(pred[valid_mask], target[valid_mask], reduction='none')
+		return loss.mean()
 
 class ScaleInvariantLoss(nn.Module):
 	def __init__(self, _lambda):
@@ -748,3 +743,5 @@ os.environ['CUDA_VISIBLE_DEVICES'] = 0,1 both ok
 import os
 os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 ```
+
+# 条款26: 
